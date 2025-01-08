@@ -208,15 +208,15 @@ class Diffusion(object):
         #     fontsize=20)
         kl_unnorm_str = 'Unnormed RMSE: {:.2f}'.format(kl_unnorm)
         if prior:
-            axs[ax_idx].set_title('$p({y}_\mathbf{prior})$',
+            axs[ax_idx].set_title(r'$p({y}_\mathbf{prior})$',
                                   fontsize=23)
-            axs[ax_idx].set_title('$p({y}_\mathbf{prior})$\n' + kl_unnorm_str,
+            axs[ax_idx].set_title(r'$p({y}_\mathbf{prior})$' + "\n" + kl_unnorm_str,
                                   fontsize=23)
             axs[ax_idx].legend()
         else:
-            axs[ax_idx].set_title('$p(\mathbf{y}_{' + str(cur_t) + '})$',
+            axs[ax_idx].set_title(r'$p(\mathbf{y}_{' + str(cur_t) + '})$',
                                   fontsize=23)
-            axs[ax_idx].set_title('$p(\mathbf{y}_{' + str(cur_t) + '})$\n' + kl_unnorm_str,
+            axs[ax_idx].set_title(r'$p(\mathbf{y}_{' + str(cur_t) + '})$' + '\n' + kl_unnorm_str,
                                   fontsize=23)
 
     def train(self):
@@ -494,7 +494,7 @@ class Diffusion(object):
                                                    ).detach().cpu()
                                     axs[0].scatter(x_batch.detach().cpu(), y_1, s=10, c='tab:red')
                                     axs[0].set_title(
-                                        '$q(\mathbf{y}_{' + str(1) + '})$',
+                                        r'$q(\mathbf{y}_{' + str(1) + '})$',
                                         fontsize=23)
                                     y_q_seq = []
                                     for j in range(1, self.num_figs):
@@ -506,7 +506,7 @@ class Diffusion(object):
                                         y_q_seq.append(cur_y)
                                         axs[j].scatter(x_batch.detach().cpu(), cur_y, s=10, c='tab:red')
 
-                                        axs[j].set_title('$q(\mathbf{y}_{' + str(cur_t) + '})$',
+                                        axs[j].set_title(r'$q(\mathbf{y}_{' + str(cur_t) + '})$',
                                                          fontsize=23)
                                     # q samples at timestep T
                                     y_T = q_sample(y_batch, y_T_mean,
@@ -515,10 +515,11 @@ class Diffusion(object):
                                                    ).detach().cpu()
                                     axs[self.num_figs].scatter(x_batch.detach().cpu(), y_T, s=10, c='tab:red')
                                     axs[self.num_figs].set_title(
-                                        '$q(\mathbf{y}_{' + str(self.num_timesteps) + '})$', fontsize=23)
+                                        r'$q(\mathbf{y}_{' + str(self.num_timesteps) + '})$', fontsize=23)
                                     ax_list = [axs[j] for j in range(self.num_figs + 1)]
-                                    ax_list[0].get_shared_x_axes().join(ax_list[0], *ax_list)
-                                    ax_list[0].get_shared_y_axes().join(ax_list[0], *ax_list)
+                                    for ax in ax_list[1:]:
+                                        ax.sharex(ax_list[0])
+                                        ax.sharey(ax_list[0])
                                     if config.testing.squared_plot:
                                         for j in range(self.num_figs + 1):
                                             axs[j].set(aspect='equal', adjustable='box')
@@ -538,7 +539,7 @@ class Diffusion(object):
                                 axs[0].set_title('$p({z}_1)$', fontsize=23)
                                 # kl = kld(y_1, cur_y)
                                 # kl_y0 = kld(y_batch.detach().cpu(), cur_y)
-                                axs[0].set_title('$p(\mathbf{y}_{1})$', fontsize=23)
+                                axs[0].set_title(r'$p(\mathbf{y}_{1})$', fontsize=23)
                                 # axs[0].set_xlabel(
                                 #     'KL($q(y_t)||p(y_t)$)={:.2f}\nKL($q(y_0)||p(y_t)$)={:.2f}'.format(
                                 #         kl, kl_y0), fontsize=20)
@@ -548,14 +549,14 @@ class Diffusion(object):
                                     # kl = kld(y_q_seq[j-1].detach().cpu(), cur_y)
                                     # kl_y0 = kld(y_batch.detach().cpu(), cur_y)
                                     axs[j].scatter(x_batch.detach().cpu(), cur_y, s=10, c='tab:blue')
-                                    axs[j].set_title('$p(\mathbf{y}_{' + str(cur_t) + '})$', fontsize=23)
+                                    axs[j].set_title(r'$p(\mathbf{y}_{' + str(cur_t) + '})$', fontsize=23)
                                     # axs[j].set_xlabel(
                                     #     'KL($q(y_t)||p(y_t)$)={:.2f}\nKL($q(y_0)||p(y_t)$)={:.2f}'.format(
                                     #         kl, kl_y0), fontsize=20)
                                 # p samples at timestep T
                                 cur_y = y_p_seq[0].detach().cpu()
                                 axs[self.num_figs].scatter(x_batch.detach().cpu(), cur_y, s=10, c='tab:blue')
-                                axs[self.num_figs].set_title('$p({z}_\mathbf{prior})$', fontsize=23)
+                                axs[self.num_figs].set_title(r'$p({z}_\mathbf{prior})$', fontsize=23)
                                 # kl = kld(y_T, cur_y)
                                 # kl_y0 = kld(y_batch.detach().cpu(), cur_y)
                                 # axs[self.num_figs].set_xlabel(
@@ -563,8 +564,11 @@ class Diffusion(object):
                                 #         kl, kl_y0), fontsize=20)
                                 if step > 1:
                                     ax_list = [axs[j] for j in range(self.num_figs + 1)]
-                                    ax_list[0].get_shared_x_axes().join(ax_list[0], *ax_list)
-                                    ax_list[0].get_shared_y_axes().join(ax_list[0], *ax_list)
+                                    # ax_list[0].get_shared_x_axes().join(ax_list[0], *ax_list)
+                                    # ax_list[0].get_shared_y_axes().join(ax_list[0], *ax_list)
+                                    for ax in ax_list[1:]:
+                                        ax.sharex(ax_list[0])
+                                        ax.sharey(ax_list[0])
                                     # define custom 'xlim' and 'ylim' values
                                     # custom_xlim = axs[0].get_xlim()
                                     # custom_ylim = axs[0].get_ylim()
@@ -664,7 +668,7 @@ class Diffusion(object):
                                  torch.tensor([i * self.vis_step])).detach().cpu()
                 y_q_seq.append(cur_y)
                 axs[i].scatter(x_batch, cur_y, s=10)
-                axs[i].set_title('$q(\mathbf{y}_{' + str(i * self.vis_step) + '})$', fontsize=23)
+                axs[i].set_title(r'$q(\mathbf{y}_{' + str(i * self.vis_step) + '})$', fontsize=23)
                 axs[i].tick_params(axis='x', labelsize=20)
                 axs[i].tick_params(axis='y', labelsize=20)
             cur_y = q_sample(y_batch, y_T_mean.cpu(),
@@ -672,7 +676,7 @@ class Diffusion(object):
                              torch.tensor([self.num_timesteps - 1])).detach().cpu()
             y_q_seq.append(cur_y)
             axs[self.num_figs - 1].scatter(x_batch, cur_y, s=10)
-            axs[self.num_figs - 1].set_title('$q(\mathbf{y}_{' + str(self.num_timesteps - 1) + '})$', fontsize=23)
+            axs[self.num_figs - 1].set_title(r'$q(\mathbf{y}_{' + str(self.num_timesteps - 1) + '})$', fontsize=23)
             fig.savefig(
                 os.path.join(self.args.im_path, 'diffusion_samples_T{}_{}.png'.format(self.num_timesteps, ckpt_id)))
 
@@ -687,9 +691,9 @@ class Diffusion(object):
                 axs[0, i].scatter(x_batch, y_q_seq[i], s=10)
                 axs[0, i].tick_params(axis='x', labelsize=20)
                 axs[0, i].tick_params(axis='y', labelsize=20)
-                axs[0, i].set_title('$q(\mathbf{y}_{' + str(i * self.vis_step) + '})$', fontsize=23)
+                axs[0, i].set_title(r'$q(\mathbf{y}_{' + str(i * self.vis_step) + '})$', fontsize=23)
                 axs[1, i].scatter(x_batch, cur_y, s=10)
-                axs[1, i].set_title('$p_{\\theta}(\mathbf{y}_{' + str(i * self.vis_step) + '})$', fontsize=23)
+                axs[1, i].set_title(r'$p_{\theta}(\mathbf{y}_{' + str(i * self.vis_step) + '})$', fontsize=23)
                 axs[1, i].set_xlabel(
                     'KL($q(y_t)||p(y_t)$)={:.2f}\nKL($q(y_0)||p(y_t)$)={:.2f}'.format(kl, kl_y0), fontsize=20)
                 axs[1, i].tick_params(axis='x', labelsize=20)
@@ -700,9 +704,9 @@ class Diffusion(object):
             axs[0, self.num_figs - 1].scatter(x_batch, y_q_seq[-1], s=10)
             axs[0, self.num_figs - 1].tick_params(axis='x', labelsize=20)
             axs[0, self.num_figs - 1].tick_params(axis='y', labelsize=20)
-            axs[0, self.num_figs - 1].set_title('$q(\mathbf{y}_{' + str(self.num_timesteps) + '})$', fontsize=23)
+            axs[0, self.num_figs - 1].set_title(r'$q(\mathbf{y}_{' + str(self.num_timesteps) + '})$', fontsize=23)
             axs[1, self.num_figs - 1].scatter(x_batch, cur_y, s=10)
-            axs[1, self.num_figs - 1].set_title('$p_{\\theta}(\mathbf{y}_{' + str(self.num_timesteps) + '})$',
+            axs[1, self.num_figs - 1].set_title(r'$p_{\theta}(\mathbf{y}_{' + str(self.num_timesteps) + '})$',
                                                 fontsize=23)
             axs[1, self.num_figs - 1].set_xlabel(
                 'KL($q(y_t)||p(y_t)$)={:.2f}\nKL($q(y_0)||p(y_t)$)={:.2f}'.format(kl, kl_y0), fontsize=20)
@@ -719,13 +723,13 @@ class Diffusion(object):
                 kl_y0 = kld(y_q_seq[0].detach().cpu(), cur_y)
                 heatmap_x, _, _ = np.histogram2d(x_batch.numpy(), y_q_seq[i].numpy(), bins=100)
                 axs[0, i].imshow(heatmap_x.T)
-                axs[0, i].set_title('$q(\mathbf{y}_{' + str(i * self.vis_step) + '})$', fontsize=23)
+                axs[0, i].set_title(r'$q(\mathbf{y}_{' + str(i * self.vis_step) + '})$', fontsize=23)
                 axs[0, i].axis('off')
                 axs[0, i].tick_params(axis='x', labelsize=20)
                 axs[0, i].tick_params(axis='y', labelsize=20)
                 heatmap, _, _ = np.histogram2d(x_batch.numpy(), cur_y.numpy(), bins=100)
                 axs[1, i].imshow(heatmap.T)
-                axs[1, i].set_title('$p_{\\theta}(\mathbf{y}_{' + str(i * self.vis_step) + '})$', fontsize=23)
+                axs[1, i].set_title(r'$p_{\theta}(\mathbf{y}_{' + str(i * self.vis_step) + '})$', fontsize=23)
                 axs[1, i].axis('off')
                 axs[1, i].set_xlabel(
                     'KL($q(y_t)||p(y_t)$)={:.2f}\nKL($q(y_0)||p(y_t)$)={:.2f}'.format(kl, kl_y0), fontsize=20)
@@ -736,13 +740,13 @@ class Diffusion(object):
             kl_y0 = kld(y_q_seq[0].detach().cpu(), cur_y)
             heatmap_x, _, _ = np.histogram2d(x_batch.numpy(), y_q_seq[-1].numpy(), bins=100)
             axs[0, self.num_figs - 1].imshow(heatmap_x.T)
-            axs[0, self.num_figs - 1].set_title('$q(\mathbf{y}_{' + str(self.num_timesteps) + '})$', fontsize=23)
+            axs[0, self.num_figs - 1].set_title(r'$q(\mathbf{y}_{' + str(self.num_timesteps) + '})$', fontsize=23)
             axs[0, self.num_figs - 1].axis('off')
             axs[0, self.num_figs - 1].tick_params(axis='x', labelsize=20)
             axs[0, self.num_figs - 1].tick_params(axis='y', labelsize=20)
             heatmap, _, _ = np.histogram2d(x_batch.numpy(), cur_y.numpy(), bins=100)
             axs[1, self.num_figs - 1].imshow(heatmap.T)
-            axs[1, self.num_figs - 1].set_title('$p_{\\theta}(\mathbf{y}_{' + str(self.num_timesteps) + '})$',
+            axs[1, self.num_figs - 1].set_title(r'$p_{\theta}(\mathbf{y}_{' + str(self.num_timesteps) + '})$',
                                                 fontsize=23)
             axs[1, self.num_figs - 1].axis('off')
             axs[1, self.num_figs - 1].set_xlabel(
@@ -946,7 +950,7 @@ class Diffusion(object):
         # load auxiliary model
         if config.diffusion.conditioning_signal == "NN":
             aux_states = torch.load(os.path.join(log_path, "aux_ckpt.pth"),
-                                    map_location=self.device)
+                                    map_location=self.device, weights_only=True)
             self.cond_pred_model.load_state_dict(aux_states[0], strict=True)
             self.cond_pred_model.eval()
         # report test set RMSE with guidance model
