@@ -475,8 +475,11 @@ class Diffusion(object):
                                 self.make_subplot_at_timestep_t(cur_t, cur_y, y_i, y_batch, axs, self.num_figs,
                                                                 prior=True, testing=False)
                                 ax_list = [axs[j] for j in range(self.num_figs + 1)]
-                                ax_list[0].get_shared_x_axes().join(ax_list[0], *ax_list)
-                                ax_list[0].get_shared_y_axes().join(ax_list[0], *ax_list)
+                                for ax in ax_list[1:]:
+                                    ax.sharex(ax_list[0])
+                                    ax.sharey(ax_list[0])
+                                # ax_list[0].get_shared_x_axes().join(ax_list[0], *ax_list)
+                                # ax_list[0].get_shared_y_axes().join(ax_list[0], *ax_list)
                                 tb_logger.add_figure('samples', fig, step)
                                 fig.savefig(
                                     os.path.join(args.im_path, 'samples_T{}_{}.png'.format(self.num_timesteps, step)))
