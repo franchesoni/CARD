@@ -18,3 +18,5 @@ results/
 # IntelliJ IDEA
 .idea/
 *.iml
+
+UCI_Datasets/
