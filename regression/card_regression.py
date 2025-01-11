@@ -1404,7 +1404,7 @@ class Diffusion(object):
                 )
 
         def handle_input(batch_y, cdf_at_borders, bin_masses, bin_borders):
-            cdf_at_borders, bin_borders = torch.from_numpy(cdf_at_borders), torch.from_numpy(bin_borders)
+            cdf_at_borders, bin_borders, batch_y = torch.from_numpy(cdf_at_borders), torch.from_numpy(bin_borders), torch.from_numpy(batch_y)
             # reshape inputs and return shapes too. Returns:
             # batch_y (N, Y)
             # cdf_at_borders (N, B+1)
@@ -1477,9 +1477,10 @@ class Diffusion(object):
             )
             # the log score of a histogram is the neg log of the pdf
             # the pdf is the mass of the bin divided by the bin width
+            eps = 1e-9
             if bin_masses is None:
                 bin_masses = cdf_at_borders[:, 1:] - cdf_at_borders[:, :-1]  # (1N, B)
-            bin_widths = bin_borders[:, 1:] - bin_borders[:, :-1]  # (1N, B)
+            bin_widths = bin_borders[:, 1:] - bin_borders[:, :-1] + eps  # (1N, B)
             bin_densities = bin_masses / bin_widths
             y_bin = torch.clamp(
                 torch.searchsorted(
@@ -1812,7 +1813,6 @@ class Diffusion(object):
                             y_batch=y_batch,
                             gen_y=gen_y,
                         )
-                        import ipdb; ipdb.set_trace()
  
                 else:
                     # store generated y at certain step for RMSE and for QICE computation
@@ -1864,7 +1864,6 @@ class Diffusion(object):
                         y_batch=y_batch,
                         gen_y=gen_y,
                     )
-                    import ipdb; ipdb.set_trace()
 
                 # make plot at particular mini-batches
                 if (
