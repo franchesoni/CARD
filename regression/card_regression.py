@@ -1299,6 +1299,7 @@ class Diffusion(object):
             # obtain precision value and compute test batch NLL
             if self.tau is not None:
                 tau = self.tau
+                raise ValueError("tau shouldn't be set")
             else:
                 gen_y_var = (
                     torch.from_numpy(generated_y).var(dim=0, unbiased=True).numpy()
@@ -1352,57 +1353,39 @@ class Diffusion(object):
                     .astype(np.float32)
                     .reshape(batch_size, config.testing.n_z_samples, config.model.y_dim)
                 )
-            generated_y = generated_y.swapaxes(0, 1)
-            # obtain precision value and compute test batch NLL
-            if self.tau is not None:
-                tau = self.tau
-            else:
-                gen_y_var = (
-                    torch.from_numpy(generated_y).var(dim=0, unbiased=True).numpy()
-                )
-                tau = 1 / gen_y_var
-            nll = -(
-                logsumexp(-0.5 * tau * (y_true[None] - generated_y) ** 2.0, 0)
-                - np.log(config.testing.n_z_samples)
-                - 0.5 * np.log(2 * np.pi)
-                + 0.5 * np.log(tau)
-            )
+            # generated_y is (B, S, 1)
+            B, S = generated_y.shape[:2]
+            mus = generated_y.reshape(B, S)
+            pis = np.ones((B,S)) / S
+            sigmas = np.std(mus, axis=1, keepdims=True, ddof=1) * np.ones((B,S))
+            pred_params = np.concatenate((pis, mus, sigmas), axis=1)
+            nll = get_logscore_at_y(S, y_true, pred_params)
             return nll
 
-        def get_logscore_at_y(self, batch_y, pred_params):
+        log2pi = np.log(2 * np.pi)
+        def get_logscore_at_y(n_components, batch_y, pred_params):
             pis, mus, sigmas = (
-                pred_params[:, : self.n_components],
-                pred_params[:, self.n_components : 2 * self.n_components],
-                pred_params[:, 2 * self.n_components :],
+                pred_params[:, : n_components],
+                pred_params[:, n_components : 2 * n_components],
+                pred_params[:, 2 * n_components :],
             )
             assert pis.shape[0] == batch_y.shape[0]
-            assert pis.shape[1] == self.n_components
+            assert pis.shape[1] == n_components
             assert (
                 len(batch_y.shape) == 2
             ), f"batch_y.shape is {batch_y.shape} but should be (N, 1)"
-            batch_y = batch_y.unsqueeze(1)  # (B, 1, Y)
+            batch_y = batch_y[:, None, :]  # (B, 1, Y)
             pis, mus, sigmas = (
-                pis.unsqueeze(2),
-                mus.unsqueeze(2),
-                sigmas.unsqueeze(2),
+                pis.reshape(pis.shape + (1,)),
+                mus.reshape(mus.shape + (1,)),
+                sigmas.reshape(sigmas.shape + (1,)),
             )  # (B, K, 1)
             log_prob_per_component = (
-                -0.5 * (((batch_y - mus) / sigmas) ** 2)
-                - torch.log(sigmas)
-                - 0.5 * log2pi
+                -0.5 * (((np.array(batch_y) - mus) / sigmas) ** 2) - np.log(sigmas) - 0.5 * log2pi
             )  # (B, K, Y)
-            weighted_log_prob = torch.log(pis) + log_prob_per_component
-            neg_log_likelihood = -torch.logsumexp(weighted_log_prob, dim=1)  # (B, Y)
+            weighted_log_prob = np.log(pis) + log_prob_per_component
+            neg_log_likelihood = -logsumexp(weighted_log_prob, axis=1)  # (B, Y)
             return neg_log_likelihood
-
-        # pis, mus, sigmas = (
-        #     params[:, : self.n_components],
-        #     params[:, self.n_components : 2 * self.n_components],
-        #     params[:, 2 * self.n_components :],
-        # )
-        # pis = nn.functional.softmax(pis, dim=1)  # pis must be positive and sum to 1
-        # sigmas = nn.functional.softplus(sigmas)  # w_b must be positive
-        # return torch.concatenate([pis, mus, sigmas], dim=1)
 
         def store_nll_at_step_t2(config, idx, dataset_object, y_batch, gen_y):
             current_t = self.num_timesteps - idx
@@ -1413,14 +1396,15 @@ class Diffusion(object):
                 y_batch=y_batch,
                 generated_y=gen_y,
             )
-            if len(nll_by_batch_list[current_t]) == 0:
-                nll_by_batch_list[current_t] = nll
+            if len(nll_by_batch_list2[current_t]) == 0:
+                nll_by_batch_list2[current_t] = nll
             else:
-                nll_by_batch_list[current_t] = np.concatenate(
-                    [nll_by_batch_list[current_t], nll], axis=0
+                nll_by_batch_list2[current_t] = np.concatenate(
+                    [nll_by_batch_list2[current_t], nll], axis=0
                 )
 
         def handle_input(batch_y, cdf_at_borders, bin_masses, bin_borders):
+            cdf_at_borders, bin_borders = torch.from_numpy(cdf_at_borders), torch.from_numpy(bin_borders)
             # reshape inputs and return shapes too. Returns:
             # batch_y (N, Y)
             # cdf_at_borders (N, B+1)
@@ -1519,9 +1503,59 @@ class Diffusion(object):
             ).sum(dim=1)
             return log_score
 
+
+        def compute_batch_NLL3(config, dataset_object, y_batch, generated_y):
+            """
+            generated_y: has a shape of (current_batch_size, n_z_samples, dim_y)
+
+            NLL computation implementation from MC dropout repo
+                https://github.com/yaringal/DropoutUncertaintyExps/blob/master/net/net.py,
+                directly from MC Dropout paper Eq. (8).
+            """
+            y_true = y_batch.cpu().detach().numpy()
+            if dataset_object.normalize_y:
+                # unnormalize true y
+                y_true = dataset_object.scaler_y.inverse_transform(y_true).astype(
+                    np.float32
+                )
+                # unnormalize generated y
+                batch_size = generated_y.shape[0]
+                generated_y = generated_y.reshape(
+                    batch_size * config.testing.n_z_samples, config.model.y_dim
+                )
+                generated_y = (
+                    dataset_object.scaler_y.inverse_transform(generated_y)
+                    .astype(np.float32)
+                    .reshape(batch_size, config.testing.n_z_samples, config.model.y_dim)
+                )
+            # generated_y is (B, S, 1)
+            B, S = generated_y.shape[:2]
+            cdf_at_borders = (np.arange(S) / (S-1))[None] * np.ones((B,S))
+            bin_masses = None
+            bin_borders = generated_y.reshape((B,S))
+            nll = get_logscore_at_y_PL(y_true, cdf_at_borders, bin_masses, bin_borders)
+            return nll
+
+        def store_nll_at_step_t3(config, idx, dataset_object, y_batch, gen_y):
+            current_t = self.num_timesteps - idx
+            # compute negative log-likelihood in each batch
+            nll = compute_batch_NLL3(
+                config=config,
+                dataset_object=dataset_object,
+                y_batch=y_batch,
+                generated_y=gen_y,
+            )
+            if len(nll_by_batch_list3[current_t]) == 0:
+                nll_by_batch_list3[current_t] = nll
+            else:
+                nll_by_batch_list3[current_t] = np.concatenate(
+                    [nll_by_batch_list3[current_t], nll], axis=0
+                )
+
         #####################################################################################################
         #####################################################################################################
 
+        print("- preparing...")
         args = self.args
         config = self.config
         split = args.split
@@ -1535,8 +1569,10 @@ class Diffusion(object):
         self.dataset_object = dataset_object
         # set global prevision value for NLL computation if needed
         if args.nll_global_var:
+            raise NotImplementedError("did you set global var? Not expected.")
             set_NLL_global_precision(test_var=args.nll_test_var)
 
+        print("- loading...")
         model = ConditionalGuidedModel(self.config)
         if getattr(self.config.testing, "ckpt_id", None) is None:
             states = torch.load(
@@ -1573,6 +1609,7 @@ class Diffusion(object):
             self.cond_pred_model.load_state_dict(aux_states[0], strict=True)
             self.cond_pred_model.eval()
         # report test set RMSE with guidance model
+        print("- evaluating guidance rmse...")
         y_rmse_aux_model = self.evaluate_guidance_model(dataset_object, test_loader)
         logging.info(
             "Test set unnormalized y RMSE on trained {} guidance model is {:.8f}.".format(
@@ -1582,6 +1619,7 @@ class Diffusion(object):
 
         # sanity check
         logging.info("Sanity check of the checkpoint")
+        print("- sanity checking...")
         if config.data.dataset == "uci":
             dataset_check = dataset_object.return_dataset(split="train")
         else:
@@ -1663,6 +1701,7 @@ class Diffusion(object):
                 ).format(config.testing.mean_t, config.testing.coverage_t)
             )
 
+        print("- testing...")
         with torch.no_grad():
             true_x_by_batch_list = []
             true_x_tile_by_batch_list = []
@@ -1670,6 +1709,8 @@ class Diffusion(object):
             gen_y_by_batch_list = [[] for _ in range(self.num_timesteps + 1)]
             y_se_by_batch_list = [[] for _ in range(self.num_timesteps + 1)]
             nll_by_batch_list = [[] for _ in range(self.num_timesteps + 1)]
+            nll_by_batch_list2 = [[] for _ in range(self.num_timesteps + 1)]
+            nll_by_batch_list3 = [[] for _ in range(self.num_timesteps + 1)]
 
             for step, xy_batch in enumerate(test_loader):
                 # minibatch_start = time.time()
@@ -1757,6 +1798,22 @@ class Diffusion(object):
                             y_batch=y_batch,
                             gen_y=gen_y,
                         )
+                        store_nll_at_step_t2(
+                            config=config,
+                            idx=idx,
+                            dataset_object=dataset_object,
+                            y_batch=y_batch,
+                            gen_y=gen_y,
+                        )
+                        store_nll_at_step_t3(
+                            config=config,
+                            idx=idx,
+                            dataset_object=dataset_object,
+                            y_batch=y_batch,
+                            gen_y=gen_y,
+                        )
+                        import ipdb; ipdb.set_trace()
+ 
                 else:
                     # store generated y at certain step for RMSE and for QICE computation
                     gen_y = store_gen_y_at_step_t(
@@ -1793,6 +1850,21 @@ class Diffusion(object):
                         y_batch=y_batch,
                         gen_y=gen_y,
                     )
+                    store_nll_at_step_t2(
+                        config=config,
+                        idx=nll_idx,
+                        dataset_object=dataset_object,
+                        y_batch=y_batch,
+                        gen_y=gen_y,
+                    )
+                    store_nll_at_step_t3(
+                        config=config,
+                        idx=nll_idx,
+                        dataset_object=dataset_object,
+                        y_batch=y_batch,
+                        gen_y=gen_y,
+                    )
+                    import ipdb; ipdb.set_trace()
 
                 # make plot at particular mini-batches
                 if (
@@ -1845,6 +1917,8 @@ class Diffusion(object):
         y_qice_all_steps_list = []
         y_picp_all_steps_list = []
         y_nll_all_steps_list = []
+        y_nll_all_steps_list2 = []
+        y_nll_all_steps_list3 = []
 
         if config.testing.compute_metric_all_steps:
             for idx in range(self.num_timesteps + 1):
@@ -1872,6 +1946,11 @@ class Diffusion(object):
                 # compute NLL
                 y_nll = np.mean(nll_by_batch_list[current_t])
                 y_nll_all_steps_list.append(y_nll)
+                y_nll2 = np.mean(nll_by_batch_list2[current_t])
+                y_nll_all_steps_list2.append(y_nll2)
+                y_nll3 = np.mean(nll_by_batch_list3[current_t])
+                y_nll_all_steps_list3.append(y_nll3)
+
             # make plot for metrics across all timesteps during reverse diffusion
             n_metrics = 4
             fig, axs = plt.subplots(
@@ -1953,6 +2032,10 @@ class Diffusion(object):
             # compute NLL
             y_nll = np.mean(nll_by_batch_list[config.testing.nll_t])
             y_nll_all_steps_list.append(y_nll)
+            y_nll2 = np.mean(nll_by_batch_list2[config.testing.nll_t])
+            y_nll_all_steps_list2.append(y_nll2)
+            y_nll3 = np.mean(nll_by_batch_list3[config.testing.nll_t])
+            y_nll_all_steps_list3.append(y_nll3)
             logging.info(
                 "\nNegative Log-Likelihood on test set is {:.8f}.".format(y_nll)
             )
@@ -1961,6 +2044,8 @@ class Diffusion(object):
         logging.info(f"y QICE at all steps: {y_qice_all_steps_list}.\n")
         logging.info(f"y PICP at all steps: {y_picp_all_steps_list}.\n\n")
         logging.info(f"y NLL at all steps: {y_nll_all_steps_list}.\n\n")
+        logging.info(f"y NLL2 at all steps: {y_nll_all_steps_list2}.\n\n")
+        logging.info(f"y NLL3 at all steps: {y_nll_all_steps_list3}.\n\n")
 
         # make plots for true vs. generated distribution comparison
         if config.testing.make_plot:
@@ -2277,4 +2362,6 @@ class Diffusion(object):
             y_qice_all_steps_list,
             y_picp_all_steps_list,
             y_nll_all_steps_list,
+            y_nll_all_steps_list2,
+            y_nll_all_steps_list3,
         )
