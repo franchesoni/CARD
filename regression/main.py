@@ -279,19 +279,21 @@ def main():
     logging.info("Exp comment = {}".format(args.comment))
 
     if args.loss == 'card_conditional':
-        from card_regression import Diffusion
+        from card_regression import Diffusion as Runner
+    elif args.loss == 'ours':
+        from ours import Runner
     else:
         raise NotImplementedError("Invalid loss option")
 
     try:
-        runner = Diffusion(args, config, device=config.device)
+        runner = Runner(args, config, device=config.device)
         start_time = time.time()
         procedure = None
         if args.sample:
             runner.sample()
             procedure = "Sampling"
         elif args.test:
-            y_rmse_all_steps_list, y_qice_all_steps_list, y_picp_all_steps_list, y_nll_all_steps_list = runner.test()
+            y_rmse_all_steps_list, y_qice_all_steps_list, y_picp_all_steps_list, y_nll_all_steps_list, y_nll_all_steps_list2, y_nll_all_steps_list3 = runner.test()
             procedure = "Testing"
         else:
             runner.train()
@@ -306,7 +308,7 @@ def main():
             handler.close()
         # return test metric lists
         if args.test:
-            return y_rmse_all_steps_list, y_qice_all_steps_list, y_picp_all_steps_list, y_nll_all_steps_list, config
+            return y_rmse_all_steps_list, y_qice_all_steps_list, y_picp_all_steps_list, y_nll_all_steps_list, y_nll_all_steps_list2, y_nll_all_steps_list3, config
     except Exception:
         logging.error(traceback.format_exc())
 
@@ -314,7 +316,7 @@ def main():
 if __name__ == "__main__":
     if args.run_all:
         y_rmse_all_splits_all_steps_list, y_qice_all_splits_all_steps_list, \
-        y_picp_all_splits_all_steps_list, y_nll_all_splits_all_steps_list = [], [], [], []
+        y_picp_all_splits_all_steps_list, y_nll_all_splits_all_steps_list, y_nll_all_splits_all_steps_list2, y_nll_all_splits_all_steps_list3 = [], [], [], [], [], []
         original_doc = args.doc
         original_config = args.config
         for split in range(args.init_split, args.n_splits):
@@ -325,11 +327,13 @@ if __name__ == "__main__":
             if args.test:
                 args.config = original_config + args.doc + "/config.yml"
                 y_rmse_all_steps_list, y_qice_all_steps_list, \
-                y_picp_all_steps_list, y_nll_all_steps_list, config = main()
+                y_picp_all_steps_list, y_nll_all_steps_list, y_nll_all_steps_list2, y_nll_all_steps_list3, config = main()
                 y_rmse_all_splits_all_steps_list.append(y_rmse_all_steps_list)
                 y_qice_all_splits_all_steps_list.append(y_qice_all_steps_list)
                 y_picp_all_splits_all_steps_list.append(y_picp_all_steps_list)
                 y_nll_all_splits_all_steps_list.append(y_nll_all_steps_list)
+                y_nll_all_splits_all_steps_list2.append(y_nll_all_steps_list2)
+                y_nll_all_splits_all_steps_list3.append(y_nll_all_steps_list3)
             else:
                 main()
 
@@ -344,12 +348,16 @@ if __name__ == "__main__":
             y_qice_all_splits_list = [metric_list[qice_idx] for metric_list in y_qice_all_splits_all_steps_list]
             y_picp_all_splits_list = [metric_list[picp_idx] for metric_list in y_picp_all_splits_all_steps_list]
             y_nll_all_splits_list = [metric_list[nll_idx] for metric_list in y_nll_all_splits_all_steps_list]
+            y_nll_all_splits_list2 = [metric_list[nll_idx] for metric_list in y_nll_all_splits_all_steps_list2]
+            y_nll_all_splits_list3 = [metric_list[nll_idx] for metric_list in y_nll_all_splits_all_steps_list3]
 
             print("\n\n================ Results Across Splits ================")
             print(f"y_RMSE mean: {np.mean(y_rmse_all_splits_list)} y_RMSE std: {np.std(y_rmse_all_splits_list)}")
             print(f"QICE mean: {np.mean(y_qice_all_splits_list)} QICE std: {np.std(y_qice_all_splits_list)}")
             print(f"PICP mean: {np.mean(y_picp_all_splits_list)} PICP std: {np.std(y_picp_all_splits_list)}")
             print(f"NLL mean: {np.mean(y_nll_all_splits_list)} NLL std: {np.std(y_nll_all_splits_list)}")
+            print(f"NLL2 mean: {np.mean(y_nll_all_splits_list2)} NLL2 std: {np.std(y_nll_all_splits_list2)}")
+            print(f"NLL3 mean: {np.mean(y_nll_all_splits_list3)} NLL3 std: {np.std(y_nll_all_splits_list3)}")
 
             # plot mean of all metric across all splits at all time steps during reverse diffusion
             y_rmse_all_splits_all_steps_array = np.array(y_rmse_all_splits_all_steps_list)
@@ -416,7 +424,11 @@ if __name__ == "__main__":
                         'PICP mean': float(np.mean(y_picp_all_splits_list)),
                         'PICP std': float(np.std(y_picp_all_splits_list)),
                         'NLL mean': float(np.mean(y_nll_all_splits_list)),
-                        'NLL std': float(np.std(y_nll_all_splits_list))
+                        'NLL std': float(np.std(y_nll_all_splits_list)),
+                        'NLL2 mean': float(np.mean(y_nll_all_splits_list2)),
+                        'NLL2 std': float(np.std(y_nll_all_splits_list2)),
+                        'NLL3 mean': float(np.mean(y_nll_all_splits_list3)),
+                        'NLL3 std': float(np.std(y_nll_all_splits_list3))
                         }
             args_dict = {'task': config.data.dataset,
                          'loss': args.loss,
