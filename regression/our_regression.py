@@ -50,8 +50,7 @@ class Runner:
         assert dataset_object.train_dim_y == 1
         ys = dataset[:, -1]
         bounds = (min(ys.min(), -3 * ys.std()), max(ys.max(), 3 * ys.std()))
-        # hparams = dict(n_components=10, n_bins=10, n_quantile_levels=10, bounds=bounds)
-        hparams = dict(n_components=10, n_bins=2, n_quantile_levels=10, bounds=bounds)
+        hparams = dict(n_components=10, n_bins=10, n_quantile_levels=10, bounds=bounds)
 
         model = get_method(self.method_name)(
             [dataset_object.train_dim_x, 100, 50],
@@ -119,7 +118,6 @@ class Runner:
 
         print("- testing...")
         logscores = []
-        import ipdb; ipdb.set_trace()
         with torch.no_grad():
             for step, xy_batch in enumerate(test_loader):
                 # minibatch_start = time.time()
