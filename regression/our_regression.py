@@ -21,7 +21,7 @@ class Runner:
             )
         self.device = device
         self.dataset_object = None
-        self.method_name = args.loss.split('.')[1]
+        self.method_name = args.loss.split(".")[1]
 
     def train(self):
         args = self.args
@@ -49,10 +49,13 @@ class Runner:
         # load model
         assert dataset_object.train_dim_y == 1
         ys = dataset[:, -1]
+        bounds = (min(ys.min(), -3 * ys.std()), max(ys.max(), 3 * ys.std()))
+        # hparams = dict(n_components=10, n_bins=10, n_quantile_levels=10, bounds=bounds)
+        hparams = dict(n_components=10, n_bins=2, n_quantile_levels=10, bounds=bounds)
+
         model = get_method(self.method_name)(
             [dataset_object.train_dim_x, 100, 50],
-            10,
-            bounds=(min(ys.min(), -3 * ys.std()), max(ys.max(), 3 * ys.std())),
+            **hparams
         ).to(config.device)
         optimizer = get_optimizer(self.config.optim, model.parameters())
         train_epochs = config.diffusion.nonlinear_guidance.n_pretrain_epochs
@@ -68,7 +71,7 @@ class Runner:
                 loss.backward()
                 optimizer.step()
                 print(f"epoch {epoch} step {step:03} loss {loss:.3f}", end="\r")
-        states = [model.state_dict(), optimizer.state_dict()]
+        states = [model.state_dict(), optimizer.state_dict(), hparams]
         torch.save(states, os.path.join(args.log_path, "ckpt.pth"))
 
     def test(self):
@@ -106,18 +109,17 @@ class Runner:
             )
             ckpt_id = self.config.testing.ckpt_id
         logging.info(f"Loading from: {log_path}/ckpt_{ckpt_id}.pth")
-        n_bins = int(states[0]["n_bins"])
-        bounds = (int(states[0]["bounds"][0]), int(states[0]["bounds"][1]))
+        hparams = states[2]
 
         model = get_method(self.method_name)(
-            [dataset_object.train_dim_x, 100, 50], n_bins, bounds=bounds
-        ).to(config.device)
+            [dataset_object.train_dim_x, 100, 50], **hparams).to(config.device)
         model = model.to(self.device)
         model.load_state_dict(states[0], strict=True)
         model.eval()
 
         print("- testing...")
         logscores = []
+        import ipdb; ipdb.set_trace()
         with torch.no_grad():
             for step, xy_batch in enumerate(test_loader):
                 # minibatch_start = time.time()
@@ -130,6 +132,6 @@ class Runner:
                 logscores.append(model.get_logscore_at_y(y_batch, pred).cpu())
 
         y_nll_all_steps_list = torch.concatenate(logscores).view(-1).numpy().tolist()
-        logging.info(f"y NLL at all steps: {y_nll_all_steps_list}.\n\n")
+        # logging.info(f"y NLL at all steps: {y_nll_all_steps_list}.\n\n")
 
         return ([], [], [], y_nll_all_steps_list, [], [])

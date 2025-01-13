@@ -9,19 +9,21 @@ log2pi = torch.log(torch.tensor(2 * torch.pi))
 
 
 class MLP(nn.Module):
-    def __init__(self, layer_sizes: Sequence[int], activation_fn=nn.GELU, dropout_p=0.0):
+    def __init__(
+        self,
+        layer_sizes: Sequence[int],
+        activation_fn=nn.LeakyReLU,
+        dropout_p=0.0,
+        **kwargs,
+    ):
         super(MLP, self).__init__()
         self.dropout_p = dropout_p
         layers = []
         for i in range(len(layer_sizes) - 1):
-            layers.append(
-                nn.Linear(layer_sizes[i], layer_sizes[i + 1])
-            )
+            layers.append(nn.Linear(layer_sizes[i], layer_sizes[i + 1]))
             if i < len(layer_sizes) - 2:
                 layers.append(activation_fn())
-                layers.append(
-                    nn.Dropout(p=self.dropout_p)
-                )
+                layers.append(nn.Dropout(p=self.dropout_p))
         self.network = nn.Sequential(*layers)
 
     def forward(self, x):
@@ -126,7 +128,11 @@ class LaplaceCRPS(LaplaceLogScore):
 
     def get_crps_at_y(self, batch_y, pred_params):
         mus, bs = pred_params[:, 0:1], pred_params[:, 1:]
-        crps = bs * (torch.abs(batch_y - mus)/bs + torch.exp(-torch.abs(batch_y - mus)/bs) - 3/4)
+        crps = bs * (
+            torch.abs(batch_y - mus) / bs
+            + torch.exp(-torch.abs(batch_y - mus) / bs)
+            - 3 / 4
+        )
         return crps
 
     def loss(self, batch_y, pred_params):
@@ -248,8 +254,6 @@ class CategoricalCrossEntropy(ProbabilisticMethod, nn.Module):
         It does not include the last layer.
         """
         super(CategoricalCrossEntropy, self).__init__()
-        self.register_buffer('n_bins', torch.tensor(n_bins))
-        self.register_buffer('bounds', torch.tensor(bounds).float())
         self.bin_borders = torch.linspace(bounds[0], bounds[1], n_bins + 1)
         self.B = len(self.bin_borders) - 1
         self.bin_widths = self.bin_borders[1:] - self.bin_borders[:-1]
@@ -378,10 +382,9 @@ class LogScoreQR(PinballLoss):
         if (bin_widths < 0).any():  # bins are unordered, crps can't be computed
             return super().loss(batch_y, pred_params)
         else:
-            return get_logscore_at_y_PL(batch_y, **self.prepare_params(pred_params)).mean()
-
-
-
+            return get_logscore_at_y_PL(
+                batch_y, **self.prepare_params(pred_params)
+            ).mean()
 
 
 class IQN(ProbabilisticMethod, nn.Module):
@@ -554,8 +557,7 @@ class MCD(CategoricalCrossEntropy):
         else:
             std_ = std
         preds = torch.stack(
-            [self.model(x) + torch.normal(0, std_) for _ in range(self.n_preds)],
-            dim=1
+            [self.model(x) + torch.normal(0, std_) for _ in range(self.n_preds)], dim=1
         )
         # preds is (BS, n_preds, 1)
         # print(f"one prediction is {preds[0, :10]}")
@@ -563,7 +565,9 @@ class MCD(CategoricalCrossEntropy):
         # Calculate histogram
         probs = torch.zeros((preds.shape[0], self.B))  # (BS, num_bins)
         for n in range(preds.shape[0]):
-            hist = torch.histc(preds[n], bins=self.B, min=self.bounds[0], max=self.bounds[1])
+            hist = torch.histc(
+                preds[n], bins=self.B, min=self.bounds[0], max=self.bounds[1]
+            )
             probs[n] = hist / hist.sum()
         return probs
 
@@ -573,7 +577,7 @@ class MCD(CategoricalCrossEntropy):
 
     def turn_on_dropout(self):
         for m in self.model.modules():
-            if m.__class__.__name__.startswith('Dropout'):
+            if m.__class__.__name__.startswith("Dropout"):
                 m.train()
 
 
@@ -638,35 +642,109 @@ def handle_input(batch_y, cdf_at_borders, bin_masses, bin_borders):
 
 
 def get_logscore_at_y_PL(batch_y, cdf_at_borders, bin_masses, bin_borders):
+    # unpack from handle_input
     N, Y, B, batch_y, cdf_at_borders, bin_masses, bin_borders, bin_widths = (
         handle_input(batch_y, cdf_at_borders, bin_masses, bin_borders)
     )
-    # the log score of a histogram is the neg log of the pdf
-    # the pdf is the mass of the bin divided by the bin width
-    if bin_masses is None:
-        bin_masses = cdf_at_borders[:, 1:] - cdf_at_borders[:, :-1]  # (1N, B)
-    bin_widths = bin_borders[:, 1:] - bin_borders[:, :-1]  # (1N, B)
-    bin_densities = bin_masses / bin_widths
-    y_bin = torch.clamp(
-        torch.searchsorted(
-            (
-                bin_borders.squeeze()
-                if (bin_borders.shape[0] == 1 and Y > 1)
-                else bin_borders
-            ),
-            batch_y,
+
+    #
+    # -- SUGGESTED ASSERTIONS --
+    #
+
+    # 1) Check that batch_y has expected shape (N, Y).
+    assert batch_y.shape == (N, Y), (
+        f"batch_y must have shape (N, Y).  " f"Got {batch_y.shape}, expected ({N}, {Y})"
+    )
+
+    # 2) cdf_at_borders should have shape (N, B+1).
+    #    We also often expect it to be sorted along dim=1, and possibly first=0, last=1, etc.
+    assert cdf_at_borders.shape == (N, B + 1), (
+        f"cdf_at_borders must have shape (N, B+1).  "
+        f"Got {cdf_at_borders.shape}, expected ({N}, {B+1})"
+    )
+    # Check that it is non-decreasing in each row (typical for a CDF).
+    assert (
+        cdf_at_borders[:, :-1] <= cdf_at_borders[:, 1:]
+    ).all(), "cdf_at_borders must be sorted non-decreasing along dim=1."
+
+    # 3) bin_borders should have shape (N, B+1).
+    #    Usually we also expect it to be sorted along dim=1.
+    assert bin_borders.shape == (N, B + 1), (
+        f"bin_borders must have shape (N, B+1).  "
+        f"Got {bin_borders.shape}, expected ({N}, {B+1})"
+    )
+    # Check that it is sorted non-decreasing in each row (typical for bin edges).
+    assert (
+        bin_borders[:, :-1] <= bin_borders[:, 1:]
+    ).all(), "bin_borders must be sorted non-decreasing along dim=1."
+
+    # 4) If bin_masses is not None, check that it has shape (N, B).
+    if bin_masses is not None:
+        assert bin_masses.shape == (N, B), (
+            f"bin_masses must have shape (N, B).  "
+            f"Got {bin_masses.shape}, expected ({N}, {B})"
         )
-        - 1,
-        0,
-        B - 1,
-    )  # here we squeeze bin borders because when it has leading shape N it's fine, but when it has leading shape 1 it's not (we need to make it 1d in that case)
-    # reshape and compute
-    bin_densities = bin_densities.reshape(N, B, 1)
-    y_bin = y_bin.reshape(N, 1, y_bin.shape[1])  # (N, 1, Y)
+
+    #
+    # -- FUNCTION LOGIC --
+    #
+
+    # If bin_masses is None, compute from the difference in CDF
+    if bin_masses is None:
+        bin_masses = cdf_at_borders[:, 1:] - cdf_at_borders[:, :-1]  # (N, B)
+
+    # -- We are discarding bin_widths returned by handle_input, as you said that's fine.
+    bin_widths = bin_borders[:, 1:] - bin_borders[:, :-1]  # shape (N, B)
+
+    # Optional: check that bin_widths are strictly positive (if you expect strict monotonic edges)
+    assert (bin_widths > 0).all(), "All bin_widths must be > 0."
+    assert (bin_masses > 0).all(), "All bin_masses must be > 0."
+
+    bin_densities = bin_masses / bin_widths
+    # Optional: check that densities are >= 0
+    assert (bin_densities >= 0).all(), "bin_densities must be >= 0."
+
+    # handle the squeeze logic in searchsorted
+    #   This line tries to make bin_borders 1D if shape[0] == 1 and Y>1.
+    #   If you truly want that logic, just add an assertion to confirm the scenario:
+    if bin_borders.shape[0] == 1 and Y > 1:
+        # We expect bin_borders.shape == (1, B+1)
+        # Just to be sure:
+        assert bin_borders.shape == (
+            1,
+            B + 1,
+        ), "bin_borders squeeze logic triggered, but shape is not (1, B+1)."
+        borders_for_search = bin_borders.squeeze(dim=0)  # shape becomes (B+1,)
+    else:
+        borders_for_search = bin_borders
+
+    # Now we do searchsorted
+    y_bin = torch.searchsorted(borders_for_search, batch_y) - 1
+    assert y_bin.min() >= 0, "y_bin must be >= 0."
+    assert y_bin.max() < B, "y_bin must be < B."
+
+    # Check that y_bin shape is (N, Y)
+    assert y_bin.shape == (N, Y), (
+        f"searchsorted result must have shape (N, Y).  Got {y_bin.shape}, "
+        f"expected ({N}, {Y}).  Possibly shape mismatch with bin_borders."
+    )
+
+    # reshape so we can index in the bin dimension
+    bin_densities = bin_densities.reshape(N, B, 1)  # => (N, B, 1)
+    y_bin = y_bin.reshape(N, 1, y_bin.shape[1])  # => (N, 1, Y)
+
+    # final log_score
     log_score = -(
-        torch.log(bin_densities + 1e-45)
+        torch.log(bin_densities)
         * (y_bin == torch.arange(B, device=batch_y.device).reshape(1, B, 1))
     ).sum(dim=1)
+
+    # log_score should be shape (N, Y)
+    assert log_score.shape == (N, Y), (
+        f"Final log_score must be (N, Y).  Got {log_score.shape}, "
+        f"expected ({N}, {Y})."
+    )
+
     return log_score
 
 
