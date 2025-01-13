@@ -280,8 +280,8 @@ def main():
 
     if args.loss == 'card_conditional':
         from card_regression import Diffusion as Runner
-    elif args.loss == 'ours':
-        from ours import Runner
+    elif args.loss.startswith('ours'):
+        from our_regression import Runner
     else:
         raise NotImplementedError("Invalid loss option")
 
@@ -344,106 +344,139 @@ if __name__ == "__main__":
             qice_idx = n_timesteps - args.qice_timestep
             picp_idx = n_timesteps - args.picp_timestep
             nll_idx = n_timesteps - args.nll_timestep
-            y_rmse_all_splits_list = [metric_list[rmse_idx] for metric_list in y_rmse_all_splits_all_steps_list]
-            y_qice_all_splits_list = [metric_list[qice_idx] for metric_list in y_qice_all_splits_all_steps_list]
-            y_picp_all_splits_list = [metric_list[picp_idx] for metric_list in y_picp_all_splits_all_steps_list]
-            y_nll_all_splits_list = [metric_list[nll_idx] for metric_list in y_nll_all_splits_all_steps_list]
-            y_nll_all_splits_list2 = [metric_list[nll_idx] for metric_list in y_nll_all_splits_all_steps_list2]
-            y_nll_all_splits_list3 = [metric_list[nll_idx] for metric_list in y_nll_all_splits_all_steps_list3]
+            try:
+                y_rmse_all_splits_list = [metric_list[rmse_idx] for metric_list in y_rmse_all_splits_all_steps_list]
+                y_qice_all_splits_list = [metric_list[qice_idx] for metric_list in y_qice_all_splits_all_steps_list]
+                y_picp_all_splits_list = [metric_list[picp_idx] for metric_list in y_picp_all_splits_all_steps_list]
+                y_nll_all_splits_list = [metric_list[nll_idx] for metric_list in y_nll_all_splits_all_steps_list]
+                y_nll_all_splits_list2 = [metric_list[nll_idx] for metric_list in y_nll_all_splits_all_steps_list2]
+                y_nll_all_splits_list3 = [metric_list[nll_idx] for metric_list in y_nll_all_splits_all_steps_list3]
 
-            print("\n\n================ Results Across Splits ================")
-            print(f"y_RMSE mean: {np.mean(y_rmse_all_splits_list)} y_RMSE std: {np.std(y_rmse_all_splits_list)}")
-            print(f"QICE mean: {np.mean(y_qice_all_splits_list)} QICE std: {np.std(y_qice_all_splits_list)}")
-            print(f"PICP mean: {np.mean(y_picp_all_splits_list)} PICP std: {np.std(y_picp_all_splits_list)}")
-            print(f"NLL mean: {np.mean(y_nll_all_splits_list)} NLL std: {np.std(y_nll_all_splits_list)}")
-            print(f"NLL2 mean: {np.mean(y_nll_all_splits_list2)} NLL2 std: {np.std(y_nll_all_splits_list2)}")
-            print(f"NLL3 mean: {np.mean(y_nll_all_splits_list3)} NLL3 std: {np.std(y_nll_all_splits_list3)}")
 
-            # plot mean of all metric across all splits at all time steps during reverse diffusion
-            y_rmse_all_splits_all_steps_array = np.array(y_rmse_all_splits_all_steps_list)
-            y_qice_all_splits_all_steps_array = np.array(y_qice_all_splits_all_steps_list)
-            y_picp_all_splits_all_steps_array = np.array(y_picp_all_splits_all_steps_list)
-            y_nll_all_splits_all_steps_array = np.array(y_nll_all_splits_all_steps_list)
-            y_rmse_mean_all_splits_list = [np.mean(
-                y_rmse_all_splits_all_steps_array[:, idx]) for idx in range(n_timesteps + 1)]
-            y_qice_mean_all_splits_list = [np.mean(
-                y_qice_all_splits_all_steps_array[:, idx]) for idx in range(n_timesteps + 1)]
-            y_picp_mean_all_splits_list = [np.mean(
-                y_picp_all_splits_all_steps_array[:, idx]) for idx in range(n_timesteps + 1)]
-            y_nll_mean_all_splits_list = [np.mean(
-                y_nll_all_splits_all_steps_array[:, idx]) for idx in range(n_timesteps + 1)]
-            n_metric = 4
-            fig, axs = plt.subplots(n_metric, 1, figsize=(8.5, n_metric * 3))  # W x H
-            plt.subplots_adjust(hspace=0.5)
-            xticks = np.arange(0, n_timesteps + 1, config.diffusion.vis_step)
-            # RMSE
-            axs[0].plot(y_rmse_mean_all_splits_list)
-            # axs[0].set_title('mean y RMSE of All Splits across All Timesteps', fontsize=14)
-            axs[0].set_xlabel('timestep', fontsize=12)
-            axs[0].set_xticks(xticks)
-            axs[0].set_xticklabels(xticks[::-1])
-            axs[0].set_ylabel('y RMSE', fontsize=12)
-            # NLL
-            axs[1].plot(y_nll_mean_all_splits_list)
-            # axs[3].set_title('mean y NLL of All Splits across All Timesteps', fontsize=14)
-            axs[1].set_xlabel('timestep', fontsize=12)
-            axs[1].set_xticks(xticks)
-            axs[1].set_xticklabels(xticks[::-1])
-            axs[1].set_ylabel('y NLL', fontsize=12)
-            # QICE
-            axs[2].plot(y_qice_mean_all_splits_list)
-            # axs[1].set_title('mean y QICE of All Splits across All Timesteps', fontsize=14)
-            axs[2].set_xlabel('timestep', fontsize=12)
-            axs[2].set_xticks(xticks)
-            axs[2].set_xticklabels(xticks[::-1])
-            axs[2].set_ylabel('y QICE', fontsize=12)
-            # PICP
-            picp_ideal = (config.testing.PICP_range[1]-config.testing.PICP_range[0])/100
-            axs[3].plot(y_picp_mean_all_splits_list)
-            axs[3].axhline(y=picp_ideal, c='b', label='95 % coverage')
-            # axs[2].set_title('mean y PICP of All Splits across All Timesteps', fontsize=14)
-            axs[3].set_xlabel('timestep', fontsize=12)
-            axs[3].set_xticks(xticks)
-            axs[3].set_xticklabels(xticks[::-1])
-            axs[3].set_ylabel('y PICP', fontsize=12)
-            axs[3].legend()
 
-            # fig.suptitle('Mean y Metrics of All Splits across All Timesteps')
-            im_path = os.path.join(args.exp, config.testing.image_folder, original_doc)
-            if not os.path.exists(im_path):
-                os.makedirs(im_path)
-            fig.savefig(os.path.join(im_path, 'mean_metrics_all_splits_all_timesteps.pdf'))
+                print("\n\n================ Results Across Splits ================")
+                print(f"y_RMSE mean: {np.mean(y_rmse_all_splits_list)} y_RMSE std: {np.std(y_rmse_all_splits_list)}")
+                print(f"QICE mean: {np.mean(y_qice_all_splits_list)} QICE std: {np.std(y_qice_all_splits_list)}")
+                print(f"PICP mean: {np.mean(y_picp_all_splits_list)} PICP std: {np.std(y_picp_all_splits_list)}")
+                print(f"NLL mean: {np.mean(y_nll_all_splits_list)} NLL std: {np.std(y_nll_all_splits_list)}")
+                print(f"NLL2 mean: {np.mean(y_nll_all_splits_list2)} NLL2 std: {np.std(y_nll_all_splits_list2)}")
+                print(f"NLL3 mean: {np.mean(y_nll_all_splits_list3)} NLL3 std: {np.std(y_nll_all_splits_list3)}")
 
-            timestr = datetime.now(timezone(timedelta(hours=-6))).strftime("%Y%m%d-%H%M%S-%f")  # US Central time
-            res_file_path = os.path.join(args.exp, "logs", original_doc, "metrics_all_splits")
-            res_dict = {'n_splits': args.n_splits, 'task': original_doc,
-                        'y_RMSE mean': float(np.mean(y_rmse_all_splits_list)),
-                        'y_RMSE std': float(np.std(y_rmse_all_splits_list)),
-                        'QICE mean': float(np.mean(y_qice_all_splits_list)),
-                        'QICE std': float(np.std(y_qice_all_splits_list)),
-                        'PICP mean': float(np.mean(y_picp_all_splits_list)),
-                        'PICP std': float(np.std(y_picp_all_splits_list)),
-                        'NLL mean': float(np.mean(y_nll_all_splits_list)),
-                        'NLL std': float(np.std(y_nll_all_splits_list)),
-                        'NLL2 mean': float(np.mean(y_nll_all_splits_list2)),
-                        'NLL2 std': float(np.std(y_nll_all_splits_list2)),
-                        'NLL3 mean': float(np.mean(y_nll_all_splits_list3)),
-                        'NLL3 std': float(np.std(y_nll_all_splits_list3))
-                        }
-            args_dict = {'task': config.data.dataset,
-                         'loss': args.loss,
-                         'guidance': config.diffusion.conditioning_signal,
-                         'n_timesteps': n_timesteps,
-                         'n_splits': args.n_splits
-                         }
-            # save metrics and model hyperparameters to a json file
-            if not os.path.exists(res_file_path):
-                os.makedirs(res_file_path)
-            with open(res_file_path + f"/metrics_{timestr}.json", "w") as outfile:
-                json.dump(res_dict, outfile)
-                outfile.write('\n\nExperiment arguments:\n')
-                json.dump(args_dict, outfile)
-            print("\nTest metrics saved in .json file.")
+                # plot mean of all metric across all splits at all time steps during reverse diffusion
+                y_rmse_all_splits_all_steps_array = np.array(y_rmse_all_splits_all_steps_list)
+                y_qice_all_splits_all_steps_array = np.array(y_qice_all_splits_all_steps_list)
+                y_picp_all_splits_all_steps_array = np.array(y_picp_all_splits_all_steps_list)
+                y_nll_all_splits_all_steps_array = np.array(y_nll_all_splits_all_steps_list)
+                y_rmse_mean_all_splits_list = [np.mean(
+                    y_rmse_all_splits_all_steps_array[:, idx]) for idx in range(n_timesteps + 1)]
+                y_qice_mean_all_splits_list = [np.mean(
+                    y_qice_all_splits_all_steps_array[:, idx]) for idx in range(n_timesteps + 1)]
+                y_picp_mean_all_splits_list = [np.mean(
+                    y_picp_all_splits_all_steps_array[:, idx]) for idx in range(n_timesteps + 1)]
+                y_nll_mean_all_splits_list = [np.mean(
+                    y_nll_all_splits_all_steps_array[:, idx]) for idx in range(n_timesteps + 1)]
+                n_metric = 4
+                fig, axs = plt.subplots(n_metric, 1, figsize=(8.5, n_metric * 3))  # W x H
+                plt.subplots_adjust(hspace=0.5)
+                xticks = np.arange(0, n_timesteps + 1, config.diffusion.vis_step)
+                # RMSE
+                axs[0].plot(y_rmse_mean_all_splits_list)
+                # axs[0].set_title('mean y RMSE of All Splits across All Timesteps', fontsize=14)
+                axs[0].set_xlabel('timestep', fontsize=12)
+                axs[0].set_xticks(xticks)
+                axs[0].set_xticklabels(xticks[::-1])
+                axs[0].set_ylabel('y RMSE', fontsize=12)
+                # NLL
+                axs[1].plot(y_nll_mean_all_splits_list)
+                # axs[3].set_title('mean y NLL of All Splits across All Timesteps', fontsize=14)
+                axs[1].set_xlabel('timestep', fontsize=12)
+                axs[1].set_xticks(xticks)
+                axs[1].set_xticklabels(xticks[::-1])
+                axs[1].set_ylabel('y NLL', fontsize=12)
+                # QICE
+                axs[2].plot(y_qice_mean_all_splits_list)
+                # axs[1].set_title('mean y QICE of All Splits across All Timesteps', fontsize=14)
+                axs[2].set_xlabel('timestep', fontsize=12)
+                axs[2].set_xticks(xticks)
+                axs[2].set_xticklabels(xticks[::-1])
+                axs[2].set_ylabel('y QICE', fontsize=12)
+                # PICP
+                picp_ideal = (config.testing.PICP_range[1]-config.testing.PICP_range[0])/100
+                axs[3].plot(y_picp_mean_all_splits_list)
+                axs[3].axhline(y=picp_ideal, c='b', label='95 % coverage')
+                # axs[2].set_title('mean y PICP of All Splits across All Timesteps', fontsize=14)
+                axs[3].set_xlabel('timestep', fontsize=12)
+                axs[3].set_xticks(xticks)
+                axs[3].set_xticklabels(xticks[::-1])
+                axs[3].set_ylabel('y PICP', fontsize=12)
+                axs[3].legend()
+
+                # fig.suptitle('Mean y Metrics of All Splits across All Timesteps')
+                im_path = os.path.join(args.exp, config.testing.image_folder, original_doc)
+                if not os.path.exists(im_path):
+                    os.makedirs(im_path)
+                fig.savefig(os.path.join(im_path, 'mean_metrics_all_splits_all_timesteps.pdf'))
+
+                timestr = datetime.now(timezone(timedelta(hours=-6))).strftime("%Y%m%d-%H%M%S-%f")  # US Central time
+                res_file_path = os.path.join(args.exp, "logs", original_doc, "metrics_all_splits")
+                res_dict = {'n_splits': args.n_splits, 'task': original_doc,
+                            'y_RMSE mean': float(np.mean(y_rmse_all_splits_list)),
+                            'y_RMSE std': float(np.std(y_rmse_all_splits_list)),
+                            'QICE mean': float(np.mean(y_qice_all_splits_list)),
+                            'QICE std': float(np.std(y_qice_all_splits_list)),
+                            'PICP mean': float(np.mean(y_picp_all_splits_list)),
+                            'PICP std': float(np.std(y_picp_all_splits_list)),
+                            'NLL mean': float(np.mean(y_nll_all_splits_list)),
+                            'NLL std': float(np.std(y_nll_all_splits_list)),
+                            'NLL2 mean': float(np.mean(y_nll_all_splits_list2)),
+                            'NLL2 std': float(np.std(y_nll_all_splits_list2)),
+                            'NLL3 mean': float(np.mean(y_nll_all_splits_list3)),
+                            'NLL3 std': float(np.std(y_nll_all_splits_list3))
+                            }
+                args_dict = {'task': config.data.dataset,
+                            'loss': args.loss,
+                            'guidance': config.diffusion.conditioning_signal,
+                            'n_timesteps': n_timesteps,
+                            'n_splits': args.n_splits
+                            }
+                # save metrics and model hyperparameters to a json file
+                if not os.path.exists(res_file_path):
+                    os.makedirs(res_file_path)
+                with open(res_file_path + f"/metrics_{timestr}.json", "w") as outfile:
+                    json.dump(res_dict, outfile)
+                    outfile.write('\n\nExperiment arguments:\n')
+                    json.dump(args_dict, outfile)
+                print("\nTest metrics saved in .json file.")
+
+            except IndexError:
+                y_nll_all_splits_list = [np.mean(l) for l in y_nll_all_splits_all_steps_list]
+
+                print("\n\n================ Results Across Splits ================")
+                print(f"NLL mean: {np.mean(y_nll_all_splits_list)} NLL std: {np.std(y_nll_all_splits_list)}")
+
+                timestr = datetime.now(timezone(timedelta(hours=-6))).strftime("%Y%m%d-%H%M%S-%f")  # US Central time
+                res_file_path = os.path.join(args.exp, "logs", original_doc, "metrics_all_splits")
+                res_dict = {'n_splits': args.n_splits, 'task': original_doc,
+                            'NLL mean': float(np.mean(y_nll_all_splits_list)),
+                            'NLL std': float(np.std(y_nll_all_splits_list)),
+                            }
+                args_dict = {'task': config.data.dataset,
+                            'loss': args.loss,
+                            'n_timesteps': n_timesteps,
+                            'n_splits': args.n_splits
+                            }
+                # save metrics and model hyperparameters to a json file
+                if not os.path.exists(res_file_path):
+                    os.makedirs(res_file_path)
+                with open(res_file_path + f"/metrics_{timestr}.json", "w") as outfile:
+                    json.dump(res_dict, outfile)
+                    outfile.write('\n\nExperiment arguments:\n')
+                    json.dump(args_dict, outfile)
+                print("\nTest metrics saved in .json file.")
+
+
+
+
     else:
         args.doc = args.doc + "/split_" + str(args.split)
         if args.test:
