@@ -451,7 +451,7 @@ if __name__ == "__main__":
             except IndexError:
                 y_nll_all_splits_list = [np.mean(l) for l in y_nll_all_splits_all_steps_list]
 
-                print("\n\n================ Results Across Splits ================")
+                print(f"\n\n================ Results Across Splits for {args.loss} ================")
                 print(f"NLL mean: {np.mean(y_nll_all_splits_list)} NLL std: {np.std(y_nll_all_splits_list)}")
 
                 timestr = datetime.now(timezone(timedelta(hours=-6))).strftime("%Y%m%d-%H%M%S-%f")  # US Central time
