@@ -2039,12 +2039,13 @@ class Diffusion(object):
                 "\nNegative Log-Likelihood on test set is {:.8f}.".format(y_nll)
             )
 
-        logging.info(f"y RMSE at all steps: {y_rmse_all_steps_list}.\n")
-        logging.info(f"y QICE at all steps: {y_qice_all_steps_list}.\n")
-        logging.info(f"y PICP at all steps: {y_picp_all_steps_list}.\n\n")
-        logging.info(f"y NLL at all steps: {y_nll_all_steps_list}.\n\n")
-        logging.info(f"y NLL2 at all steps: {y_nll_all_steps_list2}.\n\n")
-        logging.info(f"y NLL3 at all steps: {y_nll_all_steps_list3}.\n\n")
+
+        # logging.info(f"y RMSE at all steps: {y_rmse_all_steps_list}.\n")
+        # logging.info(f"y QICE at all steps: {y_qice_all_steps_list}.\n")
+        # logging.info(f"y PICP at all steps: {y_picp_all_steps_list}.\n\n")
+        # logging.info(f"y NLL at all steps: {y_nll_all_steps_list}.\n\n")
+        # logging.info(f"y NLL2 at all steps: {y_nll_all_steps_list2}.\n\n")
+        # logging.info(f"y NLL3 at all steps: {y_nll_all_steps_list3}.\n\n")
 
         # make plots for true vs. generated distribution comparison
         if config.testing.make_plot:
