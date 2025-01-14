@@ -49,8 +49,8 @@ class Runner:
         # load model
         assert dataset_object.train_dim_y == 1
         ys = dataset[:, -1]
-        bounds = (min(ys.min(), -3 * ys.std()), max(ys.max(), 3 * ys.std()))
-        hparams = dict(n_components=10, n_bins=10, n_quantile_levels=10, bounds=bounds)
+        bounds = (min(ys.min(), -4 * ys.std() + ys.mean()), max(ys.max(), 4 * ys.std() + ys.mean()))
+        hparams = dict(n_components=32, n_bins=32, n_quantile_levels=32, bounds=bounds)
 
         model = get_method(self.method_name)(
             [dataset_object.train_dim_x, 100, 50],

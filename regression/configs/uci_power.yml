@@ -6,7 +6,7 @@ data:
     one_hot_encoding: False
     normalize_x: True
     normalize_y: True
-    data_root: "/data/datasets/UCI_Datasets"
+    data_root: "/home/franchesoni/mine/repos/CARD/UCI_Datasets"
 
 model:
     type: "simple"

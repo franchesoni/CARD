@@ -698,6 +698,8 @@ def get_logscore_at_y_PL(batch_y, cdf_at_borders, bin_masses, bin_borders):
 
     # Optional: check that bin_widths are strictly positive (if you expect strict monotonic edges)
     assert (bin_widths > 0).all(), "All bin_widths must be > 0."
+    bin_masses = bin_masses + 1e-5
+    bin_masses = bin_masses / bin_masses.sum(dim=1, keepdims=True)
     assert (bin_masses > 0).all(), "All bin_masses must be > 0."
 
     bin_densities = bin_masses / bin_widths
