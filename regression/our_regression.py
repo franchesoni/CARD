@@ -112,11 +112,19 @@ class Runner:
                 val_loss = torch.stack(val_losses).mean()
                 model.train()
                 writer.add_scalar("Loss/val", val_loss, step_offset)
+                writer.add_histogram("val/nll", torch.tensor(val_losses), step_offset)
                 early_stopper(val_cost=val_loss, epoch=epoch)
             if early_stopper.early_stop:
                 print("Early stopping")
                 best_n_epochs = early_stopper.best_epoch
                 break
+
+        # reset model
+        model = get_method(self.method_name)(
+            [dataset_object.train_dim_x, 100, 50], **hparams
+        ).to(config.device)
+        optimizer = get_optimizer(self.config.optim, model.parameters())
+        model.train()
         for epoch in range(best_n_epochs):
             step_offset = len(train_loader) * epoch
             for step, xy_0 in enumerate(train_loader):
@@ -130,6 +138,11 @@ class Runner:
                 optimizer.step()
                 print(f"epoch {epoch} step {step:03} loss {loss:.3f}", end="\r")
                 writer.add_scalar("Loss/train", loss, step_offset + step)
+        targets = []
+        for xy_0 in train_loader:
+            y_batch = xy_0[:, -self.config.model.y_dim :]
+            targets += y_batch.view(-1).tolist()
+        writer.add_histogram("targets", torch.tensor(targets))
 
         states = [model.state_dict(), optimizer.state_dict(), hparams]
         torch.save(states, os.path.join(args.log_path, "ckpt.pth"))
@@ -184,12 +197,12 @@ class Runner:
             for step, xy_batch in enumerate(test_loader):
                 # minibatch_start = time.time()
                 xy_0 = xy_batch.to(self.device)
-                current_batch_size = xy_0.shape[0]
                 x_batch = xy_0[:, : -config.model.y_dim]
                 y_batch = xy_0[:, -config.model.y_dim :]
                 pred = model(x_batch)
+                nll = model.get_logscore_at_y(y_batch, pred).cpu() + torch.tensor(np.log(dataset_object.scaler_y.scale_))
+                logscores.append(nll)
 
-                logscores.append(model.get_logscore_at_y(y_batch, pred).cpu())
 
         y_nll_all_steps_list = torch.concatenate(logscores).view(-1).numpy().tolist()
         # logging.info(f"y NLL at all steps: {y_nll_all_steps_list}.\n\n")
