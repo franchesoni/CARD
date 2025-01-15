@@ -1,8 +1,9 @@
+set -e
 export EXP_DIR=./results
 export N_STEPS=1000
 export SERVER_NAME=a4000
-export RUN_NAME=run_ours
-export N_SPLITS=20
+export RUN_NAME=run_ours_ce_dev
+export N_SPLITS=2
 export N_THREADS=4
 export DEVICE_ID=0
 
@@ -13,7 +14,7 @@ DATASETS=("uci_boston" "uci_concrete" "uci_energy" "uci_kin8nm" "uci_naval" "uci
 # "uci_protein"  # needs N_SPLITS=5
 
 # List of loss functions
-LOSSES=("ours.ce" "ours.mdn" "ours.pinball")
+LOSSES=("ours.ce")
 
 for LOSS in "${LOSSES[@]}"; do
     export MODEL_VERSION_DIR=our_uci_results/${RUN_NAME}/${LOSS}
@@ -31,3 +32,4 @@ for LOSS in "${LOSSES[@]}"; do
             --config $EXP_DIR/${MODEL_VERSION_DIR}/logs/ --test
     done
 done
+
