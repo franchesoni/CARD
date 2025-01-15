@@ -247,6 +247,66 @@ class MixtureDensityNetwork(ProbabilisticMethod, nn.Module):
         return torch.concatenate([pis, mus, sigmas], dim=1)
 
 
+class KDESampler(ProbabilisticMethod, nn.Module):
+    def __init__(self, layer_sizes, n_components, **kwargs):
+        """
+        `layer_sizes` is a list of neurons for each layer, the first element being the dimension of the input.
+        It does not include the last layer.
+        """
+        super(KDESampler, self).__init__()
+        self.model = MLP(layer_sizes + [n_components], **kwargs)
+        self.n_components = n_components
+
+    def get_F_at_y(self, batch_y, pred_params):
+        mus = pred_params
+        pis = torch.ones_like(mus) / mus.shape[1]
+        sigmas = torch.sqrt(mus.var(dim=1, unbiased=True)) * torch.ones_like(mus)
+        assert pis.shape[0] == batch_y.shape[0]
+        assert pis.shape[1] == self.n_components
+        assert (
+            len(batch_y.shape) == 2
+        ), f"batch_y.shape is {batch_y.shape} but should be (N, 1)"
+        batch_y = batch_y.unsqueeze(1)  # (N, 1, Y)
+        pis, mus, sigmas = (
+            pis.unsqueeze(2),
+            mus.unsqueeze(2),
+            sigmas.unsqueeze(2),
+        )  # (N, K, 1)
+        return (pis * 0.5 * (1 + torch.erf((batch_y - mus) / (sigmas * (2**0.5))))).sum(
+            dim=1
+        )  # (N, Y)
+
+    def get_logscore_at_y(self, batch_y, pred_params):
+        mus = pred_params
+        pis = torch.ones_like(mus) / mus.shape[1]
+        sigmas = torch.sqrt(
+            mus.var(dim=1, unbiased=True, keepdims=True)
+        ) * torch.ones_like(mus)
+        assert pis.shape[0] == batch_y.shape[0]
+        assert pis.shape[1] == self.n_components
+        assert (
+            len(batch_y.shape) == 2
+        ), f"batch_y.shape is {batch_y.shape} but should be (N, 1)"
+        batch_y = batch_y.unsqueeze(1)  # (B, 1, Y)
+        pis, mus, sigmas = (
+            pis.unsqueeze(2),
+            mus.unsqueeze(2),
+            sigmas.unsqueeze(2),
+        )  # (B, K, 1)
+        log_prob_per_component = (
+            -0.5 * (((batch_y - mus) / sigmas) ** 2) - torch.log(sigmas) - 0.5 * log2pi
+        )  # (B, K, Y)
+        weighted_log_prob = torch.log(pis) + log_prob_per_component
+        neg_log_likelihood = -torch.logsumexp(weighted_log_prob, dim=1)  # (B, Y)
+        return neg_log_likelihood
+
+    def loss(self, batch_y, pred_params):
+        return self.get_logscore_at_y(batch_y, pred_params).mean()
+
+    def forward(self, batch_x):
+        return self.model(batch_x)  # samples
+
+
 class CategoricalCrossEntropy(ProbabilisticMethod, nn.Module):
     def __init__(self, layer_sizes, n_bins, bounds, **kwargs):
         """
@@ -1090,6 +1150,7 @@ method_names = [
     "laplacecrps",
     "laplacewb",
     "mdn",
+    "kde",
     "ce",
     "pinball",
     "crpshist",
@@ -1107,6 +1168,8 @@ def get_method(method_name):
         return LaplaceGlobalWidth
     elif method_name == "mdn":
         return MixtureDensityNetwork
+    elif method_name == "kde":
+        return KDESampler
     elif method_name == "ce":
         return CategoricalCrossEntropy
     elif method_name == "pinball":
