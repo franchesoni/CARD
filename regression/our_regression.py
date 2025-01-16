@@ -75,8 +75,8 @@ class Runner:
         assert dataset_object.train_dim_y == 1
         ys = dataset[:, -1]
         bounds = (
-            min(ys.min(), -4 * ys.std() + ys.mean()),
-            max(ys.max(), 4 * ys.std() + ys.mean()),
+            ys.min()-(ys.max()-ys.min())/10,
+            ys.max()+(ys.max()-ys.min())/10
         )
         hparams = dict(n_components=32, n_bins=32, n_quantile_levels=32, bounds=bounds)
 
@@ -86,6 +86,7 @@ class Runner:
         optimizer = get_optimizer(self.config.optim, model.parameters())
         train_epochs = config.diffusion.nonlinear_guidance.n_pretrain_epochs
         model.train()
+        best_n_epochs = train_epochs
         for epoch in range(train_epochs):
             step_offset = len(train_subset_loader) * epoch
             for step, xy_0 in enumerate(train_subset_loader):
@@ -102,6 +103,7 @@ class Runner:
             with torch.no_grad():
                 model.eval()
                 val_losses = []
+                nlls = []
                 for xy_0 in val_loader:
                     xy_0 = xy_0.to(config.device)
                     x_batch = xy_0[:, : -self.config.model.y_dim]
@@ -109,16 +111,19 @@ class Runner:
                     pred = model(x_batch)
                     loss = model.loss(y_batch, pred)
                     val_losses.append(loss)
+                    nll = model.get_logscore_at_y(y_batch, pred)
+                    nlls += nll.view(-1).tolist()
                 val_loss = torch.stack(val_losses).mean()
+                val_nll = torch.tensor(nlls).mean() + torch.tensor(np.log(dataset_object.scaler_y.scale_))
                 model.train()
                 writer.add_scalar("Loss/val", val_loss, step_offset)
+                writer.add_scalar("Loss/val_nll", val_nll, step_offset)
                 writer.add_histogram("val/nll", torch.tensor(val_losses), step_offset)
-                early_stopper(val_cost=val_loss, epoch=epoch)
+                early_stopper(val_cost=val_nll, epoch=epoch)
             if early_stopper.early_stop:
                 print("Early stopping")
                 best_n_epochs = early_stopper.best_epoch
                 break
-
         # reset model
         model = get_method(self.method_name)(
             [dataset_object.train_dim_x, 100, 50], **hparams
