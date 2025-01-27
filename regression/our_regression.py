@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from torch.utils import data
 import logging
+from torch.optim.swa_utils import AveragedModel, get_ema_multi_avg_fn
 
 from utils import get_dataset, get_optimizer
 from our_methods import get_method
@@ -75,14 +76,18 @@ class Runner:
         assert dataset_object.train_dim_y == 1
         ys = dataset[:, -1]
         bounds = (
+            # ys.min()-(ys.max()-ys.min())/5,
+            # ys.max()+(ys.max()-ys.min())/5
             ys.min()-(ys.max()-ys.min())/10,
             ys.max()+(ys.max()-ys.min())/10
         )
-        hparams = dict(n_components=32, n_bins=32, n_quantile_levels=32, bounds=bounds)
+        hparams = dict(n_components=3, n_bins=32, n_quantile_levels=32, bounds=bounds)
 
         model = get_method(self.method_name)(
             [dataset_object.train_dim_x, 100, 50], **hparams
         ).to(config.device)
+        if getattr(config.model, "ema", None):
+            ema_model = AveragedModel(model, multi_avg_fn=get_ema_multi_avg_fn(config.model.ema_rate))
         optimizer = get_optimizer(self.config.optim, model.parameters())
         train_epochs = config.diffusion.nonlinear_guidance.n_pretrain_epochs
         model.train()
@@ -97,7 +102,13 @@ class Runner:
                 pred = model(x_batch)
                 loss = model.loss(y_batch, pred)
                 loss.backward()
+                if getattr(config.optim, 'grad_clip', None):
+                    torch.nn.utils.clip_grad_norm_(
+                        model.parameters(), config.optim.grad_clip
+                    )
                 optimizer.step()
+                if getattr(config.model, "ema", None):
+                    ema_model.update_parameters(model)
                 print(f"epoch {epoch} step {step:03} loss {loss:.3f}", end="\r")
                 writer.add_scalar("Loss/train_subset", loss, step_offset + step)
             with torch.no_grad():
@@ -108,7 +119,10 @@ class Runner:
                     xy_0 = xy_0.to(config.device)
                     x_batch = xy_0[:, : -self.config.model.y_dim]
                     y_batch = xy_0[:, -self.config.model.y_dim :]
-                    pred = model(x_batch)
+                    if getattr(config.model, "ema", None):
+                        pred = ema_model(x_batch)
+                    else:
+                        pred = model(x_batch)
                     loss = model.loss(y_batch, pred)
                     val_losses.append(loss)
                     nll = model.get_logscore_at_y(y_batch, pred)
@@ -128,6 +142,8 @@ class Runner:
         model = get_method(self.method_name)(
             [dataset_object.train_dim_x, 100, 50], **hparams
         ).to(config.device)
+        if getattr(config.model, "ema", None):
+            ema_model = AveragedModel(model, multi_avg_fn=get_ema_multi_avg_fn(config.model.ema_rate))
         optimizer = get_optimizer(self.config.optim, model.parameters())
         model.train()
         for epoch in range(best_n_epochs):
@@ -140,7 +156,13 @@ class Runner:
                 pred = model(x_batch)
                 loss = model.loss(y_batch, pred)
                 loss.backward()
+                if getattr(config.optim, 'grad_clip', None):
+                    torch.nn.utils.clip_grad_norm_(
+                        model.parameters(), config.optim.grad_clip
+                    )
                 optimizer.step()
+                if getattr(config.model, "ema", None):
+                    ema_model.update_parameters(model)
                 print(f"epoch {epoch} step {step:03} loss {loss:.3f}", end="\r")
                 writer.add_scalar("Loss/train", loss, step_offset + step)
         targets = []
@@ -149,7 +171,10 @@ class Runner:
             targets += y_batch.view(-1).tolist()
         writer.add_histogram("targets", torch.tensor(targets))
 
-        states = [model.state_dict(), optimizer.state_dict(), hparams]
+        if getattr(config.model, "ema", None):
+            states = [ema_model.module.state_dict(), optimizer.state_dict(), hparams]
+        else:
+            states = [model.state_dict(), optimizer.state_dict(), hparams]
         torch.save(states, os.path.join(args.log_path, "ckpt.pth"))
 
     def test(self):
