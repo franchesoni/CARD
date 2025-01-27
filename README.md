@@ -1,5 +1,9 @@
-# CARD: Classification and Regression Diffusion Models
+# Losses for Deep Probabilistic Regression
 
+This repo is a fork of CARD, with our implementations. See the commits to observe the changes. We left the original implementation as is and checked reproducibility (results are reproducible!).
+What follows is the original README
+
+# CARD
 This repo contains the official implementation for the paper [CARD: Classification and Regression Diffusion Models](https://arxiv.org/pdf/2206.07275.pdf) by [Xizewen Han](https://www.linkedin.com/in/xizewenhan/), [Huangjie Zheng](https://huangjiezheng.com/), and [Mingyuan Zhou](https://mingyuanzhou.github.io/). Published in NeurIPS 2022 (poster).
 
 --------------------
