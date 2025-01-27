@@ -285,32 +285,29 @@ def main():
     else:
         raise NotImplementedError("Invalid loss option")
 
-    try:
-        runner = Runner(args, config, device=config.device)
-        start_time = time.time()
-        procedure = None
-        if args.sample:
-            runner.sample()
-            procedure = "Sampling"
-        elif args.test:
-            y_rmse_all_steps_list, y_qice_all_steps_list, y_picp_all_steps_list, y_nll_all_steps_list, y_nll_all_steps_list2, y_nll_all_steps_list3 = runner.test()
-            procedure = "Testing"
-        else:
-            runner.train()
-            procedure = "Training"
-        end_time = time.time()
-        logging.info("\n{} procedure finished. It took {:.4f} minutes.\n\n\n".format(
-            procedure, (end_time - start_time) / 60))
-        # remove logging handlers
-        handlers = logger.handlers[:]
-        for handler in handlers:
-            logger.removeHandler(handler)
-            handler.close()
-        # return test metric lists
-        if args.test:
-            return y_rmse_all_steps_list, y_qice_all_steps_list, y_picp_all_steps_list, y_nll_all_steps_list, y_nll_all_steps_list2, y_nll_all_steps_list3, config
-    except Exception:
-        logging.error(traceback.format_exc())
+    runner = Runner(args, config, device=config.device)
+    start_time = time.time()
+    procedure = None
+    if args.sample:
+        runner.sample()
+        procedure = "Sampling"
+    elif args.test:
+        y_rmse_all_steps_list, y_qice_all_steps_list, y_picp_all_steps_list, y_nll_all_steps_list, y_nll_all_steps_list2, y_nll_all_steps_list3 = runner.test()
+        procedure = "Testing"
+    else:
+        runner.train()
+        procedure = "Training"
+    end_time = time.time()
+    logging.info("\n{} procedure finished. It took {:.4f} minutes.\n\n\n".format(
+        procedure, (end_time - start_time) / 60))
+    # remove logging handlers
+    handlers = logger.handlers[:]
+    for handler in handlers:
+        logger.removeHandler(handler)
+        handler.close()
+    # return test metric lists
+    if args.test:
+        return y_rmse_all_steps_list, y_qice_all_steps_list, y_picp_all_steps_list, y_nll_all_steps_list, y_nll_all_steps_list2, y_nll_all_steps_list3, config
 
 
 if __name__ == "__main__":
