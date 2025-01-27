@@ -246,6 +246,10 @@ class MixtureDensityNetwork(ProbabilisticMethod, nn.Module):
         sigmas = nn.functional.softplus(sigmas)  # w_b must be positive
         return torch.concatenate([pis, mus, sigmas], dim=1)
 
+class Gaussian(MixtureDensityNetwork):
+    def __init__(self, layer_sizes, n_components, **kwargs):
+        # call super
+        super(Gaussian, self).__init__(layer_sizes, n_components=1, **kwargs)
 
 class KDESampler(ProbabilisticMethod, nn.Module):
     def __init__(self, layer_sizes, n_components, **kwargs):
@@ -334,7 +338,7 @@ class CategoricalCrossEntropy(ProbabilisticMethod, nn.Module):
         return get_logscore_at_y_PL(batch_y, **self.prepare_params(pred_params))
 
     def loss(self, batch_y, pred_params):
-        return self.get_logscore_at_y(batch_y, pred_params).sum()
+        return self.get_logscore_at_y(batch_y, pred_params).mean()
 
     def forward(self, batch_x):
         logits = self.model(batch_x)
@@ -355,7 +359,7 @@ class PinballLoss(ProbabilisticMethod, nn.Module):
         self.quantile_levels = torch.sort(quantile_levels)[0]
         assert self.quantile_levels.min() > 0, "Quantiles must be in [0, 1]"
         assert self.quantile_levels.max() < 1, "Quantiles must be in [0, 1]"
-        self.lower, self.upper = bounds
+        self.lower, self.upper = torch.tensor(bounds)
         self.lower, self.upper = torch.tensor(self.lower), torch.tensor(self.upper)
         self.quantile_levels = torch.concatenate(
             (torch.tensor([0]), self.quantile_levels, torch.tensor([1]))
@@ -757,7 +761,10 @@ def get_logscore_at_y_PL(batch_y, cdf_at_borders, bin_masses, bin_borders):
     bin_widths = bin_borders[:, 1:] - bin_borders[:, :-1]  # shape (N, B)
 
     # Optional: check that bin_widths are strictly positive (if you expect strict monotonic edges)
-    assert (bin_widths > 0).all(), "All bin_widths must be > 0."
+    if not (bin_widths > 0).all():
+        assert not (bin_widths < 0).any(), "All bin_widths must be >= 0."
+        bin_widths += 1e-4
+        bin_borders = torch.concatenate((bin_borders[:,0:1], bin_borders[:,0:1] + torch.cumsum(bin_widths + 1e-4, dim=1)), dim=1)
     bin_masses = bin_masses + 1e-5
     bin_masses = bin_masses / bin_masses.sum(dim=1, keepdims=True)
     assert (bin_masses > 0).all(), "All bin_masses must be > 0."
@@ -1168,6 +1175,8 @@ def get_method(method_name):
         return LaplaceGlobalWidth
     elif method_name == "mdn":
         return MixtureDensityNetwork
+    elif method_name == "gaussian":
+        return Gaussian
     elif method_name == "kde":
         return KDESampler
     elif method_name == "ce":
