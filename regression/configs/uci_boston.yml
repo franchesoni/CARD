@@ -18,7 +18,7 @@ model:
     feature_dim: 128
     var_type: fixedlarge
     ema_rate: 0.9999
-    ema: True
+    # ema: True
 
 diffusion:
     beta_schedule: linear  # cosine
@@ -79,13 +79,14 @@ testing:
     fig_size: [8, 5]
 
 optim:
-    weight_decay: 0.000
+    # weight_decay: 0.000
+    weight_decay: 0.010
     optimizer: "Adam"
     lr: 0.001
     beta1: 0.9
     amsgrad: True
     eps: 0.00000001
-    grad_clip: 1.0
+    # grad_clip: 1.0
 
 aux_optim:
     weight_decay: 0.000
@@ -95,3 +96,68 @@ aux_optim:
     amsgrad: True
     eps: 0.00000001
     grad_clip: 1.0
+
+
+# weight_decay 0.01
+# no grad_clip
+# ================ Results Across Splits for ours.laplacescore ===========
+# =====                                                                   
+# NLL mean: 2.3644323339973576 NLL std: 0.19291360513211903               
+
+# weight_decay: 0.1
+# no grad_clip
+# ================ Results Across Splits for ours.laplacescore ================                                                              
+# NLL mean: 2.4320633151837994 NLL std: 0.21183531728055907                                                                                  
+    
+# weight_decay: 0.01 
+# no grad_clip
+# one_hot_encoding: False
+# ================ Results Across Splits for ours.laplacescore ================
+# NLL mean: 2.389821978237989 NLL std: 0.213681286212393
+
+# weight_decay: 0.01 
+# ================ Results Across Splits for ours.laplacescore ================
+# NLL mean: 2.4271664902965213 NLL std: 0.22755481712950512
+
+# weight_decay: 0.01 
+# ema turned on
+# ================ Results Across Splits for ours.laplacescore ================
+# NLL mean: too much
+
+# weight_decay: 0.01 
+# ema_rate 0.99
+# ================ Results Across Splits for ours.laplacescore ================
+# NLL mean: 2.381887998325566 NLL std: 0.2496726033320222
+
+# weight_decay: 0.01 
+# ema_rate 0.99
+# lr 0.005
+# ================ Results Across Splits for ours.laplacescore ================
+# NLL mean: 2.3989607020295116 NLL std: 0.2611922807886196
+
+
+# mdn k=3
+
+# weight_decay: 0.01 
+# ema_rate 0.99
+# ================ Results Across Splits for ours.mdn ================
+# NLL mean: 2.476953593178158 NLL std: 0.3239817587577299
+
+# weight_decay: 0.01 
+# ema_rate 0.99
+# ================ Results Across Splits for ours.mdn ================
+# NLL mean: 2.4058154504789737 NLL std: 0.17277174645597607
+
+# weight_decay: 0.01 
+# no ema
+# ================ Results Across Splits for ours.mdn ================
+# NLL mean: 2.4082514734041824 NLL std: 0.20946733191840602
+
+# k=2
+# ================ Results Across Splits for ours.mdn ================
+# NLL mean: 2.4914264817133387 NLL std: 0.26185016541137807
+
+# k=4
+# ================ Results Across Splits for ours.mdn ================
+# NLL mean: 2.492860978889734 NLL std: 0.3772242216930834
+

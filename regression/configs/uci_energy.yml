@@ -21,7 +21,7 @@ model:
     feature_dim: 128
     var_type: fixedlarge
     ema_rate: 0.9999
-    ema: True
+    # ema: True
 
 diffusion:
     beta_schedule: linear
@@ -82,13 +82,14 @@ testing:
     fig_size: [8, 5]
 
 optim:
-    weight_decay: 0.000
+    # weight_decay: 0.000
+    weight_decay: 0.010
     optimizer: "Adam"
     lr: 0.001
     beta1: 0.9
     amsgrad: True
     eps: 0.00000001
-    grad_clip: 1.0
+    # grad_clip: 1.0
 
 aux_optim:
     weight_decay: 0.000
